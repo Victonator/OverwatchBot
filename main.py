@@ -95,8 +95,6 @@ async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
     activity = discord.Activity(name=f'data in {len(bot.guilds)} server.', type=discord.ActivityType.watching)
     await bot.change_presence(activity=activity)
-    # slash.commands.clear()
-    # await discord_slash.manage_commands.remove_all_commands_in(762288517966594059, TOKEN, 680867132300329031)
 
 
 @bot.event
@@ -165,17 +163,33 @@ async def updateRanks():
         for game in cursor.fetchall():
             games.append(Game(game))
 
-        x, y1, y2, y3 = [], [], [], []
+        x1, x2, x3, y1, y2, y3 = [], [], [], [], [], []
+        # This is to prevent duplicate markers
+        tankPrevious, damagePrevious, supportPrevious = 0, 0, 0
+
         for game in games:
-            x.append(game.date)
-            y1.append(game.tankRank)
-            y2.append(game.damageRank)
-            y3.append(game.supportRank)
+            # Check if rang is the same
+            if tankPrevious != game.tankRank:
+                y1.append(game.tankRank)
+                x1.append(game.date)
+                tankPrevious = game.tankRank
+            # Check if rang is the same
+            if damagePrevious != game.damageRank:
+                y2.append(game.damageRank)
+                x2.append(game.date)
+                damagePrevious = game.damageRank
+            # Check if rang is the same
+            if supportPrevious != game.supportRank:
+                y3.append(game.supportRank)
+                x3.append(game.date)
+                supportPrevious = game.supportRank
+
         # plot
         fig, ax = plt.subplots()
-        plt.plot(x, y1, label="Tank", marker='o')
-        plt.plot(x, y2, label="Damage", marker='o')
-        plt.plot(x, y3, label="Support", marker='o')
+
+        plt.plot(x1, y1, label="Tank", marker='o')
+        plt.plot(x2, y2, label="Damage", marker='o')
+        plt.plot(x3, y3, label="Support", marker='o')
         plt.title(user.battleTag)
         plt.ylabel("Rank in SR")
         plt.xlabel("Time")
@@ -186,26 +200,35 @@ async def updateRanks():
         plt.legend()
         return plt
 
-    cursor = db.cursor(buffered=True)
-    for user in getAllUsers():
-        previousGame = getPreviousGame(user.battleTag)
-        currentGame, data, err = await getCurrentGame(user.battleTag)
+    try:
+        cursor = db.cursor(buffered=True)
+        for user in getAllUsers():
+            previousGame = getPreviousGame(user.battleTag)
+            currentGame, data, err = await getCurrentGame(user.battleTag)
 
-        if currentGame != previousGame and not err:
-            embed = makeEmbed(data['name'], data['ratingIcon'], data['icon'])
-            addfield("Tank", previousGame.tankRank, currentGame.tankRank)
-            addfield("Damage", previousGame.damageRank, currentGame.damageRank)
-            addfield("Support", previousGame.supportRank, currentGame.supportRank)
-            saveGame(currentGame)
-            plot = plotRank(user)
-            plot.savefig("chart.png")
-            chart = discord.File('chart.png', filename='chart.png')
-            embed.set_image(url="attachment://chart.png")
-            # Ensures the bot is connected before sending the message
-            await bot.wait_until_ready()
-            updateChannel = bot.get_channel(updateChannelID)
-            await updateChannel.send(embed=embed, file=chart)
-    cursor.close()
+            if currentGame != previousGame and not err:
+                # os.chdir('/test')
+                # # For debugging
+                # text_file = open(data['name']+" "+datetime.utcnow(), "w")
+                # text_file.write(data)
+                # text_file.close()
+
+                embed = makeEmbed(data['name'], data['ratingIcon'], data['icon'])
+                addfield("Tank", previousGame.tankRank, currentGame.tankRank)
+                addfield("Damage", previousGame.damageRank, currentGame.damageRank)
+                addfield("Support", previousGame.supportRank, currentGame.supportRank)
+                saveGame(currentGame)
+                plot = plotRank(user)
+                plot.savefig("chart.png")
+                chart = discord.File('chart.png', filename='chart.png')
+                embed.set_image(url="attachment://chart.png")
+                # Ensures the bot is connected before sending the message
+                await bot.wait_until_ready()
+                updateChannel = bot.get_channel(updateChannelID)
+                await updateChannel.send(embed=embed, file=chart)
+        cursor.close()
+    except Exception as e:
+        print("An exception occurred: ", e)
 
 
 @slash.slash(name="linkprofile", description="Link a BattleNet account to your account", guild_ids=guild_ids,
